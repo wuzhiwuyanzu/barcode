@@ -1,36 +1,66 @@
-name: Build Windows EXE
+name: Barcode Scanner Build Pipeline
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      version:
+        description: '自定义版本号 (可选)'
+        required: false
+
+env:
+  APP_NAME: BarcodeTool
+  PY_VERSION: "3.10"
 
 jobs:
   build-windows-exe:
+    name: Build Windows EXE
     runs-on: windows-latest
     
     steps:
-    - name: 1. 获取代码
-      uses: actions/checkout@v3
+    - name: 🛎️ 检出代码
+      uses: actions/checkout@v4
       
-    - name: 2. 设置Python环境
-      uses: actions/setup-python@v3
+    - name: 🐍 设置Python ${{ env.PY_VERSION }}
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: ${{ env.PY_VERSION }}
         
-    - name: 3. 安装依赖
+    - name: 📦 安装依赖
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: 4. 构建EXE文件
+    - name: 🔨 构建可执行文件
+      id: build
       run: |
-        pyinstaller --onefile --windowed --name BarcodeScanner scanner_app.py
-        # 如果有图标文件，使用这个命令：
-        # pyinstaller --onefile --windowed --name BarcodeScanner --icon=app_icon.ico scanner_app.py
+        # 设置版本号
+        if [ -n "${{ github.event.inputs.version }}" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION=$(date +'%Y.%m.%d.%H%M')
+        fi
         
-    - name: 5. 上传构建结果
-      uses: actions/upload-artifact@v3
+        # 构建命令
+        pyinstaller \
+          --onefile \
+          --windowed \
+          --name ${{ env.APP_NAME }}-$VERSION \
+          --add-data "assets;assets" \
+          scanner_app.py
+        
+        # 输出版本信息
+        echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+        echo "EXE_PATH=dist/${{ env.APP_NAME }}-$VERSION.exe" >> $GITHUB_ENV
+        
+    - name: ⬆️ 上传构建结果
+      uses: actions/upload-artifact@v4
       with:
-        name: BarcodeScanner-Windows
-        path: dist/
+        name: ${{ env.APP_NAME }}-Windows
+        path: |
+          dist/${{ env.EXE_PATH }}
+          dist/*.dll
+        retention-days: 7
+        
+    - name:
